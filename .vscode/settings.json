@@ -1,0 +1,11 @@
+{
+    "cSpell.words": [
+        "bindgen",
+        "multisample",
+        "multiview",
+        "unclipped",
+        "wgpu",
+        "wgsl",
+        "winit"
+    ]
+}
