@@ -17,7 +17,8 @@ pub async fn run() {
         }
     }
 
-    let mut app = App::default();
+    #[allow(unused_mut)]
+    let mut app = App::new().await;
 
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(ControlFlow::Poll);
@@ -25,7 +26,7 @@ pub async fn run() {
     cfg_if::cfg_if! {
         if #[cfg(target_arch="wasm32")] {
             use winit::platform::web::EventLoopExtWebSys;
-            let _= event_loop.spawn_app(&mut app);
+            let _= event_loop.spawn_app(app);
         } else {
             let _ = event_loop.run_app(&mut app);
         }

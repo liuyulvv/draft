@@ -1,6 +1,8 @@
-use std::sync::Arc;
-
 use wgpu::{include_wgsl, util::DeviceExt};
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::Arc;
+#[cfg(not(target_arch = "wasm32"))]
 use winit::window::Window;
 
 #[repr(C)]
@@ -46,13 +48,35 @@ pub struct State {
 }
 
 impl State {
-    pub async fn new(window: Arc<Window>) -> Self {
+    #[cfg(target_arch = "wasm32")]
+    pub async fn create_from_canvas(canvas: web_sys::HtmlCanvasElement) -> Self {
+        let width = canvas.width();
+        let height = canvas.height();
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            ..Default::default()
+        });
+        let surface = State::create_surface_from_canvas(&instance, canvas);
+        State::new(&instance, surface, width, height).await
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn create_from_window(window: Arc<Window>) -> Self {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             ..Default::default()
         });
-        let surface = instance.create_surface(window.clone()).unwrap();
+        let surface = State::create_surface_from_window(&instance, window);
+        State::new(&instance, surface, size.width, size.height).await
+    }
+
+    async fn new(
+        instance: &wgpu::Instance,
+        surface: wgpu::Surface<'static>,
+        width: u32,
+        height: u32,
+    ) -> Self {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
@@ -76,8 +100,8 @@ impl State {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: caps.formats[0],
-            width: size.width,
-            height: size.height,
+            width: width,
+            height: height,
             present_mode: wgpu::PresentMode::Fifo,
             alpha_mode: caps.alpha_modes[0],
             view_formats: vec![],
@@ -210,7 +234,7 @@ impl State {
             device,
             queue,
             config,
-            size,
+            size: winit::dpi::PhysicalSize::new(width, height),
             triangle_pipeline,
             point_pipeline,
             vertex_buffer,
@@ -218,6 +242,25 @@ impl State {
             index_buffer,
             num_indices,
         }
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn create_surface_from_canvas(
+        instance: &wgpu::Instance,
+        window: web_sys::HtmlCanvasElement,
+    ) -> wgpu::Surface<'static> {
+        let surface_target = wgpu::SurfaceTarget::Canvas(window);
+        let surface = instance.create_surface(surface_target).unwrap();
+        surface
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn create_surface_from_window(
+        instance: &wgpu::Instance,
+        window: Arc<Window>,
+    ) -> wgpu::Surface<'static> {
+        let surface = instance.create_surface(window.clone()).unwrap();
+        surface
     }
 
     pub fn resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
@@ -257,9 +300,9 @@ impl State {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
-                            g: 0.0,
-                            b: 0.0,
+                            r: 1.0,
+                            g: 1.0,
+                            b: 1.0,
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
@@ -267,10 +310,10 @@ impl State {
                 })],
                 ..Default::default()
             });
-            // render_pass.set_pipeline(&self.triangle_pipeline);
-            // render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            // render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            // render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            render_pass.set_pipeline(&self.triangle_pipeline);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
 
             render_pass.set_pipeline(&self.point_pipeline);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));

@@ -15,13 +15,36 @@ pub struct App {
     state: Option<state::State>,
 }
 
+impl App {
+    pub async fn new() -> Self {
+        cfg_if::cfg_if! {
+            if #[cfg(target_arch="wasm32")] {
+                let window = web_sys::window().expect("No global `window` exists");
+                let document = window.document().expect("Should have a document on window");
+                let canvas = document.get_element_by_id("canvas").unwrap();
+                let canvas = canvas
+                    .dyn_into::<web_sys::HtmlCanvasElement>()
+                    .expect("Show have a canvas");
+                Self {
+                    window: None,
+                    state: Some(state::State::create_from_canvas(canvas).await),
+                }
+            } else {
+                Self {
+                    window: None,
+                    state: None,
+                }
+            }
+        }
+    }
+}
+
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
             cfg_if::cfg_if! {
                 if #[cfg(target_arch="wasm32")] {
                     use winit::platform::web::WindowAttributesExtWebSys;
-
                     let window = web_sys::window().expect("No global `window` exists");
                     let document = window.document().expect("Should have a document on window");
                     let canvas = document.get_element_by_id("canvas").unwrap();
@@ -40,8 +63,12 @@ impl ApplicationHandler for App {
                     .expect("Create window err."),
             );
             self.window = Some(window.clone());
-            let mut _state = pollster::block_on(state::State::new(window.clone()));
-            self.state = Some(_state);
+            cfg_if::cfg_if! {
+                if #[cfg(not(target_arch="wasm32"))] {
+                    let mut _state = pollster::block_on(state::State::create_from_window(window.clone()));
+                    self.state = Some(_state);
+                }
+            }
         }
     }
 
