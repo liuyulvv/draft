@@ -1,11 +1,15 @@
 {
     "cSpell.words": [
         "bindgen",
+        "bytemuck",
         "multisample",
         "multiview",
+        "repr",
         "unclipped",
         "wgpu",
         "wgsl",
-        "winit"
-    ]
+        "winit",
+        "Zeroable"
+    ],
+    "rust-analyzer.cargo.target": "wasm32-unknown-unknown"
 }
