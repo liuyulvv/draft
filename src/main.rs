@@ -1,9 +1,5 @@
-mod app;
-mod state;
-
-use crate::app::App;
+use draft::run;
 
 fn main() {
-    let mut app = App::default();
-    app.run();
+    pollster::block_on(run());
 }

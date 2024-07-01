@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>WGPU on the Web</title>
+    </head>
+    <body>
+        <canvas id="canvas" width="640" height="480"></canvas>
+        <script type="module">
+            import init, { run } from "./pkg/wgpu_web_example.js";
+            async function main() {
+                await init();
+                run();
+            }
+            main();
+        </script>
+    </body>
+</html>

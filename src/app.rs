@@ -1,13 +1,13 @@
+use crate::state;
 use std::sync::Arc;
-
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
-    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    event_loop::ActiveEventLoop,
     window::{Window, WindowId},
 };
-
-use crate::state;
 
 #[derive(Default)]
 pub struct App {
@@ -15,18 +15,25 @@ pub struct App {
     state: Option<state::State>,
 }
 
-impl App {
-    pub fn run(&mut self) {
-        let event_loop = EventLoop::new().unwrap();
-        event_loop.set_control_flow(ControlFlow::Poll);
-        let _ = event_loop.run_app(self);
-    }
-}
-
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_none() {
-            let win_attr = Window::default_attributes().with_title("Draft");
+            cfg_if::cfg_if! {
+                if #[cfg(target_arch="wasm32")] {
+                    use winit::platform::web::WindowAttributesExtWebSys;
+
+                    let window = web_sys::window().expect("No global `window` exists");
+                    let document = window.document().expect("Should have a document on window");
+                    let canvas = document.get_element_by_id("canvas").unwrap();
+                    let canvas = canvas
+                        .dyn_into::<web_sys::HtmlCanvasElement>()
+                        .expect("Show have a canvas");
+                    let canvas = Some(canvas);
+                    let win_attr = Window::default_attributes().with_canvas(canvas);
+                } else {
+                    let win_attr = Window::default_attributes().with_title("Draft");
+                }
+            }
             let window = Arc::new(
                 event_loop
                     .create_window(win_attr)

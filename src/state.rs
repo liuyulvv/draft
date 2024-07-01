@@ -1,7 +1,35 @@
 use std::sync::Arc;
 
-use wgpu::include_wgsl;
+use wgpu::{include_wgsl, util::DeviceExt};
 use winit::window::Window;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Vertex {
+    position: [f32; 3],
+    color: [f32; 3],
+}
+
+impl Vertex {
+    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+            ],
+        }
+    }
+}
 
 pub struct State {
     surface: wgpu::Surface<'static>,
@@ -9,7 +37,12 @@ pub struct State {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
-    render_pipeline: wgpu::RenderPipeline,
+    triangle_pipeline: wgpu::RenderPipeline,
+    point_pipeline: wgpu::RenderPipeline,
+    vertex_buffer: wgpu::Buffer,
+    num_vertices: u32,
+    index_buffer: wgpu::Buffer,
+    num_indices: u32,
 }
 
 impl State {
@@ -52,20 +85,20 @@ impl State {
         };
         surface.configure(&device, &config);
         let shader = device.create_shader_module(include_wgsl!("shader.wgsl"));
-        let render_pipeline_layout =
+        let triangle_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
+                label: Some("Triangle Pipeline Layout"),
                 bind_group_layouts: &[],
                 push_constant_ranges: &[],
             });
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
+        let triangle_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Triangle Pipeline"),
+            layout: Some(&triangle_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
                 compilation_options: Default::default(),
                 entry_point: "vs_main",
-                buffers: &[],
+                buffers: &[Vertex::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -94,13 +127,96 @@ impl State {
             },
             multiview: None,
         });
+
+        let point_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Render Pipeline Layout"),
+                bind_group_layouts: &[],
+                push_constant_ranges: &[],
+            });
+        let point_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Point Pipeline"),
+            layout: Some(&point_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                compilation_options: Default::default(),
+                entry_point: "vs_main",
+                buffers: &[Vertex::desc()],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                compilation_options: Default::default(),
+                entry_point: "fs_main",
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::PointList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+        });
+        const VERTICES: &[Vertex] = &[
+            Vertex {
+                position: [-0.0868241, 0.49240386, 0.0],
+                color: [0.5, 0.0, 0.5],
+            },
+            Vertex {
+                position: [-0.49513406, 0.06958647, 0.0],
+                color: [0.5, 0.0, 0.5],
+            },
+            Vertex {
+                position: [-0.21918549, -0.44939706, 0.0],
+                color: [0.5, 0.0, 0.5],
+            },
+            Vertex {
+                position: [0.35966998, -0.3473291, 0.0],
+                color: [0.5, 0.0, 0.5],
+            },
+            Vertex {
+                position: [0.44147372, 0.2347359, 0.0],
+                color: [0.5, 0.0, 0.5],
+            },
+        ];
+        const INDICES: &[u32] = &[0, 1, 4, 1, 2, 4, 2, 3, 4];
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(INDICES),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+        let num_vertices = VERTICES.len() as u32;
+        let num_indices = INDICES.len() as u32;
         Self {
             surface,
             device,
             queue,
             config,
             size,
-            render_pipeline,
+            triangle_pipeline,
+            point_pipeline,
+            vertex_buffer,
+            num_vertices,
+            index_buffer,
+            num_indices,
         }
     }
 
@@ -117,8 +233,8 @@ impl State {
         self.size
     }
 
-    pub fn input(&mut self, event: &winit::event::WindowEvent) {
-        todo!()
+    pub fn input(&mut self, event: &winit::event::WindowEvent) -> bool {
+        return false;
     }
 
     pub fn update(&mut self) {}
@@ -141,9 +257,9 @@ impl State {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
@@ -151,8 +267,15 @@ impl State {
                 })],
                 ..Default::default()
             });
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.draw(0..3, 0..1);
+            // render_pass.set_pipeline(&self.triangle_pipeline);
+            // render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            // render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            // render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+
+            render_pass.set_pipeline(&self.point_pipeline);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw(0..self.num_vertices, 0..1);
         }
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
