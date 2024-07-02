@@ -1,3 +1,4 @@
+use crate::util;
 use wgpu::{include_wgsl, util::DeviceExt};
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -38,7 +39,7 @@ pub struct State {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
-    size: winit::dpi::PhysicalSize<u32>,
+    size: util::size::Size<u32>,
     triangle_pipeline: wgpu::RenderPipeline,
     point_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
@@ -49,7 +50,7 @@ pub struct State {
 
 impl State {
     #[cfg(target_arch = "wasm32")]
-    pub async fn create_from_canvas(canvas: web_sys::HtmlCanvasElement) -> Self {
+    pub async fn new(canvas: web_sys::HtmlCanvasElement) -> Self {
         let width = canvas.width();
         let height = canvas.height();
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -57,21 +58,21 @@ impl State {
             ..Default::default()
         });
         let surface = State::create_surface_from_canvas(&instance, canvas);
-        State::new(&instance, surface, width, height).await
+        State::config(&instance, surface, width, height).await
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub async fn create_from_window(window: Arc<Window>) -> Self {
+    pub async fn new(window: Arc<Window>) -> Self {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
             ..Default::default()
         });
         let surface = State::create_surface_from_window(&instance, window);
-        State::new(&instance, surface, size.width, size.height).await
+        State::config(&instance, surface, size.width, size.height).await
     }
 
-    async fn new(
+    async fn config(
         instance: &wgpu::Instance,
         surface: wgpu::Surface<'static>,
         width: u32,
@@ -234,7 +235,7 @@ impl State {
             device,
             queue,
             config,
-            size: winit::dpi::PhysicalSize::new(width, height),
+            size: util::size::Size { width, height },
             triangle_pipeline,
             point_pipeline,
             vertex_buffer,
@@ -263,7 +264,7 @@ impl State {
         surface
     }
 
-    pub fn resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
+    pub fn resize(&mut self, size: util::size::Size<u32>) {
         if size.width > 0 && size.height > 0 {
             self.size = size;
             self.config.width = size.width;
@@ -272,10 +273,11 @@ impl State {
         }
     }
 
-    pub fn size(&self) -> winit::dpi::PhysicalSize<u32> {
+    pub fn size(&self) -> util::size::Size<u32> {
         self.size
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn input(&mut self, event: &winit::event::WindowEvent) -> bool {
         return false;
     }
