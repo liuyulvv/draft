@@ -21,7 +21,7 @@ impl App {
             if #[cfg(target_arch="wasm32")] {
                 let window = web_sys::window().expect("No global `window` exists");
                 let document = window.document().expect("Should have a document on window");
-                let canvas = document.get_element_by_id("canvas").unwrap();
+                let canvas = document.get_element_by_id("main_canvas").unwrap();
                 let canvas = canvas
                     .dyn_into::<web_sys::HtmlCanvasElement>()
                     .expect("Show have a canvas");
@@ -47,7 +47,7 @@ impl ApplicationHandler for App {
                     use winit::platform::web::WindowAttributesExtWebSys;
                     let window = web_sys::window().expect("No global `window` exists");
                     let document = window.document().expect("Should have a document on window");
-                    let canvas = document.get_element_by_id("canvas").unwrap();
+                    let canvas = document.get_element_by_id("main_canvas").unwrap();
                     let canvas = canvas
                         .dyn_into::<web_sys::HtmlCanvasElement>()
                         .expect("Show have a canvas");
