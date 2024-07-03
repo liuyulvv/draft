@@ -20,7 +20,7 @@ pub struct App {
 
 impl App {
     #[cfg(not(target_arch = "wasm32"))]
-    pub async fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             window: None,
             state: None,

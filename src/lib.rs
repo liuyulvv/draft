@@ -9,7 +9,7 @@ use wasm_bindgen::prelude::*;
 use winit::event_loop::{ControlFlow, EventLoop};
 
 #[cfg(not(target_arch = "wasm32"))]
-pub async fn run() {
+pub fn run() {
     env_logger::init();
 
     let event_loop = EventLoop::new();
@@ -17,7 +17,7 @@ pub async fn run() {
         Ok(event_loop) => {
             event_loop.set_control_flow(ControlFlow::Poll);
             #[allow(unused_mut)]
-            let mut app = App::new().await;
+            let mut app = App::new();
             let _ = event_loop.run_app(&mut app);
         }
         Err(e) => log::error!("Error creating event loop: {:?}", e),
