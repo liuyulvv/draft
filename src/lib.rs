@@ -10,7 +10,14 @@ use winit::event_loop::{ControlFlow, EventLoop};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run() {
-    env_logger::init();
+    let file_appender = tracing_appender::rolling::hourly("./", "draft.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    tracing_subscriber::fmt()
+        .with_writer(non_blocking)
+        .with_ansi(false)
+        .with_file(true)
+        .with_line_number(true)
+        .init();
 
     let event_loop = EventLoop::new();
     match event_loop {
