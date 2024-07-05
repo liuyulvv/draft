@@ -6,6 +6,7 @@
         "multisample",
         "multiview",
         "repr",
+        "srgb",
         "unclipped",
         "wgpu",
         "wgsl",
