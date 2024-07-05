@@ -1,8 +1,6 @@
-mod app;
-mod state;
-mod util;
+mod kernel;
 
-use crate::app::App;
+use kernel::{draft::Draft, util::draft_app_type::DraftAppType};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -25,7 +23,7 @@ pub fn run() {
         Ok(event_loop) => {
             event_loop.set_control_flow(ControlFlow::Poll);
             #[allow(unused_mut)]
-            let mut app = App::new();
+            let mut app = Draft::new(DraftAppType::Desktop);
             let _ = event_loop.run_app(&mut app);
         }
         Err(e) => log::error!("Error creating event loop: {:?}", e),
@@ -43,7 +41,7 @@ pub async fn run() {
         Ok(event_loop) => {
             event_loop.set_control_flow(ControlFlow::Poll);
             #[allow(unused_mut)]
-            let mut app = App::new().await;
+            let mut app = Draft::new(DraftAppType::Web("main_canvas".to_string()));
             event_loop.spawn_app(app);
         }
         Err(e) => log::error!("Error creating event loop: {:?}", e),
