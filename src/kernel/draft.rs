@@ -2,7 +2,11 @@ use super::{
     draft_model::DraftModelVertex, draft_vertex::DraftVertex, util::draft_app_type::DraftAppType,
 };
 use std::sync::Arc;
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
 use wgpu::{include_wgsl, util::DeviceExt};
+#[cfg(target_arch = "wasm32")]
+use winit::platform::web::WindowAttributesExtWebSys;
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
@@ -24,6 +28,9 @@ pub struct Draft {
     triangle_index_buffer: Option<wgpu::Buffer>,
     triangle_vertex_count: u32,
     triangle_index_count: u32,
+
+    width: u32,
+    height: u32,
 }
 
 impl Draft {
@@ -33,6 +40,7 @@ impl Draft {
             ..Default::default()
         });
         match app_type {
+            #[cfg(not(target_arch = "wasm32"))]
             DraftAppType::Desktop => Self {
                 instance,
                 window: None,
@@ -46,16 +54,18 @@ impl Draft {
                 triangle_index_buffer: None,
                 triangle_vertex_count: 0,
                 triangle_index_count: 0,
+                width: 600,
+                height: 400,
             },
             #[cfg(target_arch = "wasm32")]
-            DraftAppType::Web(main_canvas_id) => {
+            DraftAppType::Web => {
                 let window = web_sys::window().expect("No global `window` exists");
                 let document = window.document().expect("Should have a document on window");
-                let canvas = document.get_element_by_id(main_canvas_id).unwrap();
+                let canvas = document.get_element_by_id("main_canvas").unwrap();
                 let canvas = canvas
                     .dyn_into::<web_sys::HtmlCanvasElement>()
                     .expect("Show have a canvas");
-                let surface = instance.create_surface(&canvas);
+                let surface = Draft::create_surface(&instance, canvas);
                 Self {
                     instance,
                     window: None,
@@ -69,6 +79,8 @@ impl Draft {
                     triangle_index_buffer: None,
                     triangle_vertex_count: 0,
                     triangle_index_count: 0,
+                    width: 600,
+                    height: 400,
                 }
             }
         }
@@ -133,84 +145,9 @@ impl Draft {
                 usage: wgpu::BufferUsages::INDEX,
             },
         ));
-        let diffuse_texture =
-            self.device
-                .as_ref()
-                .unwrap()
-                .create_texture(&wgpu::TextureDescriptor {
-                    size: wgpu::Extent3d {
-                        width: 512,
-                        height: 512,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                    label: Some("diffuse_texture"),
-                    view_formats: &[],
-                });
-        // 我们不需要过多地配置纹理视图，所以使用 wgpu 的默认值。
-        let diffuse_texture_view =
-            diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let diffuse_sampler =
-            self.device
-                .as_ref()
-                .unwrap()
-                .create_sampler(&wgpu::SamplerDescriptor {
-                    address_mode_u: wgpu::AddressMode::ClampToEdge,
-                    address_mode_v: wgpu::AddressMode::ClampToEdge,
-                    address_mode_w: wgpu::AddressMode::ClampToEdge,
-                    mag_filter: wgpu::FilterMode::Linear,
-                    min_filter: wgpu::FilterMode::Nearest,
-                    mipmap_filter: wgpu::FilterMode::Nearest,
-                    ..Default::default()
-                });
-        let texture_bind_group_layout = self.device.as_ref().unwrap().create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-                label: Some("Texture Bind Group Layout"),
-            },
-        );
-        let diffuse_bind_group =
-            self.device
-                .as_ref()
-                .unwrap()
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    layout: &texture_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
-                        },
-                    ],
-                    label: Some("diffuse_bind_group"),
-                });
     }
 
-    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
+    fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.as_ref().unwrap().get_current_texture()?;
         let view = output
             .texture
@@ -270,8 +207,8 @@ impl Draft {
         window: web_sys::HtmlCanvasElement,
     ) -> wgpu::Surface<'static> {
         let surface_target = wgpu::SurfaceTarget::Canvas(window);
-        let surface = self.instance.create_surface(surface_target).unwrap();
-        self.surface = Some(surface);
+        let surface = instance.create_surface(surface_target).unwrap();
+        surface
     }
 
     fn create_triangle_pipeline(&mut self) {
@@ -332,6 +269,17 @@ impl Draft {
                 multiview: None,
             })
     }
+
+    fn resize(&mut self, width: u32, height: u32) {
+        self.width = width;
+        self.height = height;
+        self.surface_configuration.as_mut().unwrap().width = width;
+        self.surface_configuration.as_mut().unwrap().height = height;
+        self.surface.as_mut().unwrap().configure(
+            self.device.as_ref().unwrap(),
+            self.surface_configuration.as_ref().unwrap(),
+        );
+    }
 }
 
 impl ApplicationHandler for Draft {
@@ -382,8 +330,21 @@ impl ApplicationHandler for Draft {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
-            WindowEvent::Resized(size) => if size.width != 0 && size.height != 0 {},
-            WindowEvent::RedrawRequested => {}
+            WindowEvent::Resized(size) => {
+                if size.width != 0 && size.height != 0 {
+                    self.resize(size.width, size.height);
+                }
+            }
+            WindowEvent::RedrawRequested => {
+                match self.render() {
+                    Ok(_) => {}
+                    Err(wgpu::SurfaceError::Lost) => self.resize(self.width, self.height),
+                    Err(e) => {
+                        eprintln!("{:?}", e);
+                    }
+                }
+                self.window.as_ref().unwrap().request_redraw();
+            }
             _ => {}
         }
     }

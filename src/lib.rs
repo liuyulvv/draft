@@ -41,7 +41,7 @@ pub async fn run() {
         Ok(event_loop) => {
             event_loop.set_control_flow(ControlFlow::Poll);
             #[allow(unused_mut)]
-            let mut app = Draft::new(DraftAppType::Web("main_canvas".to_string()));
+            let mut app = Draft::new(DraftAppType::Web);
             event_loop.spawn_app(app);
         }
         Err(e) => log::error!("Error creating event loop: {:?}", e),
