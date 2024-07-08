@@ -1,4 +1,4 @@
-use draft::run;
+use draft_kernel::run;
 
 fn main() {
     run();
