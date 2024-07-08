@@ -1,7 +1,10 @@
+use crate::draft_instance::{DraftInstanceRaw, DrawInstance};
+
 use super::{
     draft_camera::{DraftCamera, DraftCameraController, DraftCameraUniform, DraftProjection},
+    draft_instance::DraftInstance,
     draft_model::{DraftModel, DrawModel},
-    draft_util::resource_util::load_model,
+    draft_util::resource_util::{load_instance, load_model},
     draft_vertex::{DraftModelVertex, DraftVertexTrait},
 };
 use std::sync::Arc;
@@ -50,9 +53,10 @@ pub struct Draft {
     camera_bind_group_layout: Option<wgpu::BindGroupLayout>,
     camera_bind_group: Option<wgpu::BindGroup>,
 
-    mouse_pressed: bool,
-
     obj_model: Vec<DraftModel>,
+    instances: Vec<DraftInstance>,
+
+    mouse_pressed: bool,
     last_render_time: web_time::Instant,
 }
 
@@ -64,7 +68,7 @@ impl Draft {
         });
         let width = 600;
         let height = 400;
-        let camera = DraftCamera::new((0.0, 5.0, -10.0), -90.0, -20.0);
+        let camera = DraftCamera::new((0.0, 5.0, 10.0), -90.0, -20.0);
         let projection = DraftProjection::new(width, height, 45.0, 0.1, 100.0);
         let camera_controller = DraftCameraController::new(4.0, 0.4);
         let mut camera_uniform = DraftCameraUniform::new();
@@ -91,6 +95,7 @@ impl Draft {
                 camera_bind_group_layout: None,
                 camera_bind_group: None,
                 obj_model: vec![],
+                instances: vec![],
                 mouse_pressed: false,
                 last_render_time: web_time::Instant::now(),
             },
@@ -123,6 +128,7 @@ impl Draft {
                     camera_bind_group_layout: None,
                     camera_bind_group: None,
                     obj_model: vec![],
+                    instances: vec![],
                     mouse_pressed: false,
                     last_render_time: web_time::Instant::now(),
                 }
@@ -269,8 +275,9 @@ impl Draft {
             });
 
             render_pass.set_pipeline(self.triangle_pipeline.as_ref().unwrap());
-            for model in self.obj_model.iter() {
-                render_pass.draw_model(model, self.camera_bind_group.as_ref().unwrap());
+            for instance in self.instances.iter() {
+                render_pass.draw_instance(instance, self.camera_bind_group.as_ref().unwrap());
+                // render_pass.draw_model(model, self.camera_bind_group.as_ref().unwrap());
             }
         }
         self.queue
@@ -328,7 +335,7 @@ impl Draft {
                     module: self.shader_module.as_ref().unwrap(),
                     compilation_options: Default::default(),
                     entry_point: "vs_main",
-                    buffers: &[DraftModelVertex::desc()],
+                    buffers: &[DraftModelVertex::desc(), DraftInstanceRaw::desc()],
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: self.shader_module.as_ref().unwrap(),
@@ -483,7 +490,14 @@ impl ApplicationHandler for Draft {
                             self.diffuse_bind_group_layout.as_ref().unwrap(),
                         ))
                         .unwrap();
-                        self.obj_model.push(model);
+                        let instance = load_instance(
+                            self.device.as_ref().unwrap(),
+                            model,
+                            glam::Vec3::new(0.0, 0.0, 0.0),
+                            glam::Quat::from_axis_angle(glam::Vec3::Z, 0.0),
+                        )
+                        .unwrap();
+                        self.instances.push(instance);
                     }
                     _ => {}
                 },

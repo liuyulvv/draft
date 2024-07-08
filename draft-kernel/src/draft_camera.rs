@@ -168,25 +168,25 @@ impl DraftCameraController {
         };
     }
 
-    pub fn update_camera(&mut self, camera: &mut DraftCamera, dt: Duration) {
-        let dt = dt.as_secs_f32();
+    pub fn update_camera(&mut self, camera: &mut DraftCamera, _dt: Duration) {
+        let dt = _dt.as_secs_f32();
 
         let (yaw_sin, yaw_cos) = camera.yaw.sin_cos();
         let forward = glam::Vec3::new(yaw_cos, 0.0, yaw_sin).normalize();
         let right = glam::Vec3::new(-yaw_sin, 0.0, yaw_cos).normalize();
-        camera.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
-        camera.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
+        camera.position += forward * (self.amount_forward - self.amount_backward) * self.speed;
+        camera.position += right * (self.amount_right - self.amount_left) * self.speed;
 
         let (pitch_sin, pitch_cos) = camera.pitch.sin_cos();
         let scrollward =
             glam::Vec3::new(pitch_cos * yaw_cos, pitch_sin, pitch_cos * yaw_sin).normalize();
-        camera.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
+        camera.position += scrollward * self.scroll * self.speed * self.sensitivity;
         self.scroll = 0.0;
 
-        camera.position.y += (self.amount_up - self.amount_down) * self.speed * dt;
+        camera.position.y += (self.amount_up - self.amount_down) * self.speed;
 
-        camera.yaw += self.rotate_horizontal * self.sensitivity * dt;
-        camera.pitch += -self.rotate_vertical * self.sensitivity * dt;
+        camera.yaw += self.rotate_horizontal * self.sensitivity;
+        camera.pitch += -self.rotate_vertical * self.sensitivity;
 
         self.rotate_horizontal = 0.0;
         self.rotate_vertical = 0.0;

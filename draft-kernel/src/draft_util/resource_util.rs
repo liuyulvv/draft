@@ -4,8 +4,8 @@ use cfg_if::cfg_if;
 use wgpu::util::DeviceExt;
 
 use crate::{
-    draft_material::DraftMaterial, draft_mesh::DraftMesh, draft_model::DraftModel,
-    draft_texture::DraftTexture, draft_vertex::DraftModelVertex,
+    draft_instance::DraftInstance, draft_material::DraftMaterial, draft_mesh::DraftMesh,
+    draft_model::DraftModel, draft_texture::DraftTexture, draft_vertex::DraftModelVertex,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -162,4 +162,24 @@ pub async fn load_model(
         .collect::<Vec<_>>();
 
     Ok(DraftModel { meshes, materials })
+}
+
+pub fn load_instance(
+    device: &wgpu::Device,
+    model: DraftModel,
+    position: glam::Vec3,
+    rotation: glam::Quat,
+) -> anyhow::Result<DraftInstance> {
+    let data = DraftInstance::to_raw(position, rotation);
+    let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("Instance Buffer"),
+        contents: bytemuck::cast_slice(&[data]),
+        usage: wgpu::BufferUsages::VERTEX,
+    });
+    Ok(DraftInstance {
+        model,
+        position,
+        rotation,
+        buffer,
+    })
 }
