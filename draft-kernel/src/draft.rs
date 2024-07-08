@@ -1,8 +1,8 @@
 use super::{
     draft_camera::{DraftCamera, DraftCameraController, DraftCameraUniform, DraftProjection},
     draft_model::{DraftModel, DrawModel},
+    draft_util::resource_util::load_model,
     draft_vertex::{DraftModelVertex, DraftVertexTrait},
-    util::resource_util::load_model,
 };
 use std::sync::Arc;
 #[cfg(target_arch = "wasm32")]

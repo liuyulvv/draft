@@ -1,5 +1,5 @@
 struct CameraUniform{
-    view_proj:mat4x4f,
+    view_proj: mat4x4f,
 };
 
 @group(0) @binding(0)

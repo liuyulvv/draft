@@ -3,7 +3,7 @@ use std::io::{BufReader, Cursor};
 use cfg_if::cfg_if;
 use wgpu::util::DeviceExt;
 
-use crate::kernel::{
+use crate::{
     draft_material::DraftMaterial, draft_mesh::DraftMesh, draft_model::DraftModel,
     draft_texture::DraftTexture, draft_vertex::DraftModelVertex,
 };

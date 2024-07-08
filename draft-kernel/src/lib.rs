@@ -1,6 +1,13 @@
-mod kernel;
+mod draft;
+mod draft_camera;
+mod draft_material;
+mod draft_mesh;
+mod draft_model;
+mod draft_texture;
+mod draft_util;
+mod draft_vertex;
 
-use kernel::draft::{Draft, DraftAppType};
+use draft::{Draft, DraftAppType};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 use winit::event_loop::{ControlFlow, EventLoop};

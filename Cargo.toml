@@ -1,3 +1,3 @@
 [workspace]
 resolver = "2"
-members = ["draft-desktop", "draft-kernel", "draft-server"]
+members = ["draft-desktop", "draft-kernel"]
