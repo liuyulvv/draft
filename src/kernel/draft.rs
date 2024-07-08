@@ -1,5 +1,8 @@
 use super::{
-    draft_model::DraftModelVertex, draft_vertex::DraftVertex, util::draft_app_type::DraftAppType,
+    draft_camera::{DraftCamera, DraftCameraController, DraftCameraUniform, DraftProjection},
+    draft_model::{DraftModel, DrawModel},
+    draft_vertex::{DraftModelVertex, DraftVertexTrait},
+    util::resource_util::load_model,
 };
 use std::sync::Arc;
 #[cfg(target_arch = "wasm32")]
@@ -9,10 +12,19 @@ use wgpu::{include_wgsl, util::DeviceExt};
 use winit::platform::web::WindowAttributesExtWebSys;
 use winit::{
     application::ApplicationHandler,
-    event::WindowEvent,
+    event::{MouseButton, WindowEvent},
     event_loop::ActiveEventLoop,
+    keyboard::{KeyCode, PhysicalKey},
     window::{Window, WindowId},
 };
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DraftAppType {
+    #[cfg(not(target_arch = "wasm32"))]
+    Desktop,
+    #[cfg(target_arch = "wasm32")]
+    Web,
+}
 
 pub struct Draft {
     instance: wgpu::Instance,
@@ -24,13 +36,24 @@ pub struct Draft {
     shader_module: Option<wgpu::ShaderModule>,
 
     triangle_pipeline: Option<wgpu::RenderPipeline>,
-    triangle_vertex_buffer: Option<wgpu::Buffer>,
-    triangle_index_buffer: Option<wgpu::Buffer>,
-    triangle_vertex_count: u32,
-    triangle_index_count: u32,
 
     width: u32,
     height: u32,
+
+    diffuse_bind_group_layout: Option<wgpu::BindGroupLayout>,
+
+    camera: DraftCamera,
+    projection: DraftProjection,
+    camera_controller: DraftCameraController,
+    camera_uniform: DraftCameraUniform,
+    camera_buffer: Option<wgpu::Buffer>,
+    camera_bind_group_layout: Option<wgpu::BindGroupLayout>,
+    camera_bind_group: Option<wgpu::BindGroup>,
+
+    mouse_pressed: bool,
+
+    obj_model: Vec<DraftModel>,
+    last_render_time: web_time::Instant,
 }
 
 impl Draft {
@@ -39,6 +62,13 @@ impl Draft {
             backends: wgpu::Backends::all(),
             ..Default::default()
         });
+        let width = 600;
+        let height = 400;
+        let camera = DraftCamera::new((0.0, 5.0, -10.0), -90.0, -20.0);
+        let projection = DraftProjection::new(width, height, 45.0, 0.1, 100.0);
+        let camera_controller = DraftCameraController::new(4.0, 0.4);
+        let mut camera_uniform = DraftCameraUniform::new();
+        camera_uniform.update_view_proj(&camera, &projection);
         match app_type {
             #[cfg(not(target_arch = "wasm32"))]
             DraftAppType::Desktop => Self {
@@ -50,12 +80,19 @@ impl Draft {
                 queue: None,
                 shader_module: None,
                 triangle_pipeline: None,
-                triangle_vertex_buffer: None,
-                triangle_index_buffer: None,
-                triangle_vertex_count: 0,
-                triangle_index_count: 0,
-                width: 600,
-                height: 400,
+                width,
+                height,
+                diffuse_bind_group_layout: None,
+                camera,
+                projection,
+                camera_controller,
+                camera_uniform,
+                camera_buffer: None,
+                camera_bind_group_layout: None,
+                camera_bind_group: None,
+                obj_model: vec![],
+                mouse_pressed: false,
+                last_render_time: web_time::Instant::now(),
             },
             #[cfg(target_arch = "wasm32")]
             DraftAppType::Web => {
@@ -75,12 +112,19 @@ impl Draft {
                     queue: None,
                     shader_module: None,
                     triangle_pipeline: None,
-                    triangle_vertex_buffer: None,
-                    triangle_index_buffer: None,
-                    triangle_vertex_count: 0,
-                    triangle_index_count: 0,
-                    width: 600,
-                    height: 400,
+                    width,
+                    height,
+                    diffuse_bind_group_layout: None,
+                    camera,
+                    projection,
+                    camera_controller,
+                    camera_uniform,
+                    camera_buffer: None,
+                    camera_bind_group_layout: None,
+                    camera_bind_group: None,
+                    obj_model: vec![],
+                    mouse_pressed: false,
+                    last_render_time: web_time::Instant::now(),
                 }
             }
         }
@@ -124,6 +168,66 @@ impl Draft {
             self.device.as_ref().unwrap(),
             self.surface_configuration.as_ref().unwrap(),
         );
+
+        self.diffuse_bind_group_layout =
+            Some(self.device.as_ref().unwrap().create_bind_group_layout(
+                &wgpu::BindGroupLayoutDescriptor {
+                    label: Some("Texture Bind Group Layout"),
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                            count: None,
+                        },
+                    ],
+                },
+            ));
+
+        self.camera_buffer = Some(self.device.as_ref().unwrap().create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Camera Buffer"),
+                contents: bytemuck::cast_slice(&[self.camera_uniform]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            },
+        ));
+        self.camera_bind_group_layout =
+            Some(self.device.as_ref().unwrap().create_bind_group_layout(
+                &wgpu::BindGroupLayoutDescriptor {
+                    label: Some("Camera Bind Group Layout"),
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                },
+            ));
+        self.camera_bind_group = Some(self.device.as_ref().unwrap().create_bind_group(
+            &wgpu::BindGroupDescriptor {
+                label: Some("Camera Bind Group"),
+                layout: self.camera_bind_group_layout.as_ref().unwrap(),
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: self.camera_buffer.as_ref().unwrap().as_entire_binding(),
+                }],
+            },
+        ));
+
         self.shader_module = Some(
             self.device
                 .as_ref()
@@ -131,20 +235,6 @@ impl Draft {
                 .create_shader_module(include_wgsl!("shader/shader.wgsl")),
         );
         self.create_triangle_pipeline();
-        self.triangle_vertex_buffer = Some(self.device.as_ref().unwrap().create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Triangle Vertex Buffer"),
-                contents: &[],
-                usage: wgpu::BufferUsages::VERTEX,
-            },
-        ));
-        self.triangle_index_buffer = Some(self.device.as_ref().unwrap().create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Triangle Index Buffer"),
-                contents: &[],
-                usage: wgpu::BufferUsages::INDEX,
-            },
-        ));
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -167,9 +257,9 @@ impl Draft {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 1.0,
-                            g: 1.0,
-                            b: 1.0,
+                            r: 0.1,
+                            g: 0.2,
+                            b: 0.3,
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
@@ -179,13 +269,9 @@ impl Draft {
             });
 
             render_pass.set_pipeline(self.triangle_pipeline.as_ref().unwrap());
-            render_pass
-                .set_vertex_buffer(0, self.triangle_vertex_buffer.as_ref().unwrap().slice(..));
-            render_pass.set_index_buffer(
-                self.triangle_index_buffer.as_ref().unwrap().slice(..),
-                wgpu::IndexFormat::Uint32,
-            );
-            render_pass.draw_indexed(0..self.triangle_index_count, 0, 0..1);
+            for model in self.obj_model.iter() {
+                render_pass.draw_model(model, self.camera_bind_group.as_ref().unwrap());
+            }
         }
         self.queue
             .as_ref()
@@ -226,7 +312,10 @@ impl Draft {
                 .unwrap()
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Render Pipeline Layout"),
-                    bind_group_layouts: &[],
+                    bind_group_layouts: &[
+                        self.diffuse_bind_group_layout.as_ref().unwrap(),
+                        self.camera_bind_group_layout.as_ref().unwrap(),
+                    ],
                     push_constant_ranges: &[],
                 });
         self.device
@@ -273,11 +362,54 @@ impl Draft {
     fn resize(&mut self, width: u32, height: u32) {
         self.width = width;
         self.height = height;
+        self.projection.resize(width, height);
         self.surface_configuration.as_mut().unwrap().width = width;
         self.surface_configuration.as_mut().unwrap().height = height;
         self.surface.as_mut().unwrap().configure(
             self.device.as_ref().unwrap(),
             self.surface_configuration.as_ref().unwrap(),
+        );
+    }
+
+    fn input(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::KeyboardInput {
+                device_id: _,
+                event,
+                is_synthetic: _,
+            } => self.camera_controller.process_keyboard(
+                &event.physical_key,
+                &event.logical_key,
+                event.state,
+            ),
+            WindowEvent::MouseWheel {
+                device_id: _,
+                delta,
+                phase: _,
+            } => {
+                self.camera_controller.process_scroll(delta);
+                true
+            }
+            WindowEvent::MouseInput {
+                device_id: _,
+                state,
+                button: MouseButton::Left,
+            } => {
+                self.mouse_pressed = state.is_pressed();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn update(&mut self, dt: web_time::Duration) {
+        self.camera_controller.update_camera(&mut self.camera, dt);
+        self.camera_uniform
+            .update_view_proj(&self.camera, &self.projection);
+        self.queue.as_ref().unwrap().write_buffer(
+            self.camera_buffer.as_ref().unwrap(),
+            0,
+            bytemuck::cast_slice(&[self.camera_uniform]),
         );
     }
 }
@@ -295,6 +427,7 @@ impl ApplicationHandler for Draft {
             self.window = Some(window.clone());
             self.create_surface(window.clone());
             pollster::block_on(self.init(600, 400));
+            self.last_render_time = web_time::Instant::now();
         }
     }
 
@@ -326,26 +459,50 @@ impl ApplicationHandler for Draft {
         _window_id: WindowId,
         event: WindowEvent,
     ) {
-        match event {
-            WindowEvent::CloseRequested => {
-                event_loop.exit();
-            }
-            WindowEvent::Resized(size) => {
-                if size.width != 0 && size.height != 0 {
-                    self.resize(size.width, size.height);
+        if !self.input(&event) {
+            match event {
+                WindowEvent::CloseRequested => {
+                    event_loop.exit();
                 }
-            }
-            WindowEvent::RedrawRequested => {
-                match self.render() {
-                    Ok(_) => {}
-                    Err(wgpu::SurfaceError::Lost) => self.resize(self.width, self.height),
-                    Err(e) => {
-                        eprintln!("{:?}", e);
+                WindowEvent::Resized(size) => {
+                    if size.width != 0 && size.height != 0 {
+                        self.resize(size.width, size.height);
                     }
                 }
-                self.window.as_ref().unwrap().request_redraw();
+                WindowEvent::KeyboardInput {
+                    device_id: _,
+                    event,
+                    is_synthetic: _,
+                } => match event.physical_key {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    PhysicalKey::Code(KeyCode::Enter) => {
+                        let model: DraftModel = pollster::block_on(load_model(
+                            "cube.obj",
+                            self.device.as_ref().unwrap(),
+                            self.queue.as_ref().unwrap(),
+                            self.diffuse_bind_group_layout.as_ref().unwrap(),
+                        ))
+                        .unwrap();
+                        self.obj_model.push(model);
+                    }
+                    _ => {}
+                },
+                WindowEvent::RedrawRequested => {
+                    let now = web_time::Instant::now();
+                    let dt = now - self.last_render_time;
+                    self.last_render_time = now;
+                    self.update(dt);
+                    match self.render() {
+                        Ok(_) => {}
+                        Err(wgpu::SurfaceError::Lost) => self.resize(self.width, self.height),
+                        Err(e) => {
+                            eprintln!("{:?}", e);
+                        }
+                    }
+                    self.window.as_ref().unwrap().request_redraw();
+                }
+                _ => {}
             }
-            _ => {}
         }
     }
 }

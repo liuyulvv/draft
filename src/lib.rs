@@ -1,6 +1,6 @@
 mod kernel;
 
-use kernel::{draft::Draft, util::draft_app_type::DraftAppType};
+use kernel::draft::{Draft, DraftAppType};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 use winit::event_loop::{ControlFlow, EventLoop};

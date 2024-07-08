@@ -112,8 +112,8 @@ pub async fn load_model(
                 });
 
                 materials.push(DraftMaterial {
-                    name: m.name,
-                    diffuse_texture,
+                    _name: m.name,
+                    _diffuse_texture: diffuse_texture,
                     bind_group,
                 })
             }
@@ -152,7 +152,7 @@ pub async fn load_model(
             });
 
             DraftMesh {
-                name: file_name.to_string(),
+                _name: file_name.to_string(),
                 vertex_buffer,
                 index_buffer,
                 num_elements: m.mesh.indices.len() as u32,

@@ -1,31 +1,42 @@
-use super::draft_vertex::DraftVertex;
+use super::{draft_material::DraftMaterial, draft_mesh::DraftMesh};
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct DraftModelVertex {
-    pub position: [f32; 3],
-    pub tex_coords: [f32; 2],
-    pub normal: [f32; 3],
+pub struct DraftModel {
+    pub meshes: Vec<DraftMesh>,
+    pub materials: Vec<DraftMaterial>,
 }
 
-impl DraftVertex for DraftModelVertex {
-    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        use std::mem;
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<DraftModelVertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-            ],
+pub trait DrawModel<'a> {
+    fn draw_mesh(
+        &mut self,
+        mesh: &'a DraftMesh,
+        material: &'a DraftMaterial,
+        camera_bind_group: &'a wgpu::BindGroup,
+    );
+
+    fn draw_model(&mut self, model: &'a DraftModel, camera_bind_group: &'a wgpu::BindGroup);
+}
+
+impl<'a, 'b> DrawModel<'b> for wgpu::RenderPass<'a>
+where
+    'b: 'a,
+{
+    fn draw_mesh(
+        &mut self,
+        mesh: &'b DraftMesh,
+        material: &'a DraftMaterial,
+        camera_bind_group: &'a wgpu::BindGroup,
+    ) {
+        self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+        self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        self.set_bind_group(0, &material.bind_group, &[]);
+        self.set_bind_group(1, camera_bind_group, &[]);
+        self.draw_indexed(0..mesh.num_elements, 0, 0..1);
+    }
+
+    fn draw_model(&mut self, model: &'b DraftModel, camera_bind_group: &'b wgpu::BindGroup) {
+        for mesh in &model.meshes {
+            let material = &model.materials[mesh.material];
+            self.draw_mesh(mesh, material, camera_bind_group);
         }
     }
 }
