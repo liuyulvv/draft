@@ -1,17 +1,14 @@
-use crate::draft_model::{DraftModel, DrawModel};
-
 pub struct DraftInstance {
-    pub model: DraftModel,
     pub position: glam::Vec3,
     pub rotation: glam::Quat,
-    pub buffer: wgpu::Buffer,
 }
 
 impl DraftInstance {
-    pub fn to_raw(position: glam::Vec3, rotation: glam::Quat) -> DraftInstanceRaw {
+    pub fn to_raw(&self) -> DraftInstanceRaw {
         DraftInstanceRaw {
-            model: (glam::Mat4::from_translation(position) * glam::Mat4::from_quat(rotation))
-                .to_cols_array_2d(),
+            model: (glam::Mat4::from_translation(self.position)
+                * glam::Mat4::from_quat(self.rotation))
+            .to_cols_array_2d(),
         }
     }
 }
@@ -51,27 +48,5 @@ impl DraftInstanceRaw {
                 },
             ],
         }
-    }
-}
-
-pub trait DrawInstance<'a> {
-    fn draw_instance(
-        &mut self,
-        instance: &'a DraftInstance,
-        camera_bind_group: &'a wgpu::BindGroup,
-    );
-}
-
-impl<'a, 'b> DrawInstance<'b> for wgpu::RenderPass<'a>
-where
-    'b: 'a,
-{
-    fn draw_instance(
-        &mut self,
-        instance: &'b DraftInstance,
-        camera_bind_group: &'b wgpu::BindGroup,
-    ) {
-        self.set_vertex_buffer(1, instance.buffer.slice(..));
-        self.draw_model(&instance.model, camera_bind_group);
     }
 }

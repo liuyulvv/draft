@@ -1,13 +1,11 @@
-use crate::draft_instance::{DraftInstanceRaw, DrawInstance};
+use crate::{draft_instance::DraftInstanceRaw, draft_model::DraftModelManager};
 
 use super::{
     draft_camera::{DraftCamera, DraftCameraController, DraftCameraUniform, DraftProjection},
-    draft_instance::DraftInstance,
-    draft_model::{DraftModel, DrawModel},
-    draft_util::resource_util::{load_instance, load_model},
+    draft_model::DrawModel,
     draft_vertex::{DraftModelVertex, DraftVertexTrait},
 };
-use std::sync::Arc;
+use std::{borrow::BorrowMut, rc::Rc, sync::Arc};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 use wgpu::{include_wgsl, util::DeviceExt};
@@ -34,8 +32,8 @@ pub struct Draft {
     window: Option<Arc<Window>>,
     surface: Option<wgpu::Surface<'static>>,
     surface_configuration: Option<wgpu::SurfaceConfiguration>,
-    device: Option<wgpu::Device>,
-    queue: Option<wgpu::Queue>,
+    device: Option<Rc<wgpu::Device>>,
+    queue: Option<Rc<wgpu::Queue>>,
     shader_module: Option<wgpu::ShaderModule>,
 
     triangle_pipeline: Option<wgpu::RenderPipeline>,
@@ -43,7 +41,7 @@ pub struct Draft {
     width: u32,
     height: u32,
 
-    diffuse_bind_group_layout: Option<wgpu::BindGroupLayout>,
+    diffuse_bind_group_layout: Option<Rc<wgpu::BindGroupLayout>>,
 
     camera: DraftCamera,
     projection: DraftProjection,
@@ -53,8 +51,7 @@ pub struct Draft {
     camera_bind_group_layout: Option<wgpu::BindGroupLayout>,
     camera_bind_group: Option<wgpu::BindGroup>,
 
-    obj_model: Vec<DraftModel>,
-    instances: Vec<DraftInstance>,
+    model_manager: Option<DraftModelManager>,
 
     mouse_pressed: bool,
     last_render_time: web_time::Instant,
@@ -94,8 +91,7 @@ impl Draft {
                 camera_buffer: None,
                 camera_bind_group_layout: None,
                 camera_bind_group: None,
-                obj_model: vec![],
-                instances: vec![],
+                model_manager: None,
                 mouse_pressed: false,
                 last_render_time: web_time::Instant::now(),
             },
@@ -127,8 +123,7 @@ impl Draft {
                     camera_buffer: None,
                     camera_bind_group_layout: None,
                     camera_bind_group: None,
-                    obj_model: vec![],
-                    instances: vec![],
+                    model_manager: None,
                     mouse_pressed: false,
                     last_render_time: web_time::Instant::now(),
                 }
@@ -157,8 +152,8 @@ impl Draft {
             )
             .await
             .unwrap();
-        self.device = Some(device);
-        self.queue = Some(queue);
+        self.device = Some(Rc::new(device));
+        self.queue = Some(Rc::new(queue));
         let caps = self.surface.as_ref().unwrap().get_capabilities(&adapter);
         self.surface_configuration = Some(wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -175,9 +170,12 @@ impl Draft {
             self.surface_configuration.as_ref().unwrap(),
         );
 
-        self.diffuse_bind_group_layout =
-            Some(self.device.as_ref().unwrap().create_bind_group_layout(
-                &wgpu::BindGroupLayoutDescriptor {
+        self.diffuse_bind_group_layout = Some(Rc::new(
+            self.device
+                .clone()
+                .unwrap()
+                .borrow_mut()
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("Texture Bind Group Layout"),
                     entries: &[
                         wgpu::BindGroupLayoutEntry {
@@ -197,8 +195,14 @@ impl Draft {
                             count: None,
                         },
                     ],
-                },
-            ));
+                }),
+        ));
+
+        self.model_manager = Some(DraftModelManager::new(
+            self.device.clone().unwrap(),
+            self.queue.clone().unwrap(),
+            self.diffuse_bind_group_layout.clone().unwrap(),
+        ));
 
         self.camera_buffer = Some(self.device.as_ref().unwrap().create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
@@ -275,9 +279,21 @@ impl Draft {
             });
 
             render_pass.set_pipeline(self.triangle_pipeline.as_ref().unwrap());
-            for instance in self.instances.iter() {
-                render_pass.draw_instance(instance, self.camera_bind_group.as_ref().unwrap());
-                // render_pass.draw_model(model, self.camera_bind_group.as_ref().unwrap());
+            let manager_models = self.model_manager.as_ref().unwrap().models();
+            let models = manager_models.0;
+            let instances = manager_models.1;
+            let instances_buffer = manager_models.2;
+            for ((model, instance), instance_buffer) in models
+                .iter()
+                .zip(instances.iter())
+                .zip(instances_buffer.iter())
+            {
+                render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+                render_pass.draw_model_instanced(
+                    model,
+                    instance,
+                    self.camera_bind_group.as_ref().unwrap(),
+                );
             }
         }
         self.queue
@@ -483,21 +499,9 @@ impl ApplicationHandler for Draft {
                 } => match event.physical_key {
                     #[cfg(not(target_arch = "wasm32"))]
                     PhysicalKey::Code(KeyCode::Enter) => {
-                        let model: DraftModel = pollster::block_on(load_model(
-                            "cube.obj",
-                            self.device.as_ref().unwrap(),
-                            self.queue.as_ref().unwrap(),
-                            self.diffuse_bind_group_layout.as_ref().unwrap(),
-                        ))
-                        .unwrap();
-                        let instance = load_instance(
-                            self.device.as_ref().unwrap(),
-                            model,
-                            glam::Vec3::new(0.0, 0.0, 0.0),
-                            glam::Quat::from_axis_angle(glam::Vec3::Z, 0.0),
-                        )
-                        .unwrap();
-                        self.instances.push(instance);
+                        pollster::block_on(
+                            self.model_manager.as_mut().unwrap().add_model("cube.obj"),
+                        );
                     }
                     _ => {}
                 },

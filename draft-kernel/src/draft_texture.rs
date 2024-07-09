@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use anyhow::*;
 use image::GenericImageView;
 
@@ -9,8 +11,8 @@ pub struct DraftTexture {
 
 impl DraftTexture {
     pub fn from_bytes(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        device: Rc<wgpu::Device>,
+        queue: Rc<wgpu::Queue>,
         bytes: &[u8],
         label: &str,
     ) -> Result<Self> {
@@ -19,8 +21,8 @@ impl DraftTexture {
     }
 
     pub fn from_image(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        device: Rc<wgpu::Device>,
+        queue: Rc<wgpu::Queue>,
         img: &image::DynamicImage,
         label: Option<&str>,
     ) -> Result<Self> {
