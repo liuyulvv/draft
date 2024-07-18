@@ -1,8 +1,9 @@
-use crate::{draft_instance::DraftInstanceRaw, draft_model::DraftModelManager};
-
-use super::{
-    draft_camera::{DraftCamera, DraftCameraController, DraftCameraUniform, DraftProjection},
-    draft_model::DrawModel,
+use crate::{
+    draft_camera::{
+        draft_camera_manager::DraftCameraManager, draft_camera_uniform::DraftCameraUniform,
+    },
+    draft_instance::DraftInstanceRaw,
+    draft_model::{DraftModelManager, DrawModel},
     draft_vertex::{DraftModelVertex, DraftVertexTrait},
 };
 use std::{borrow::BorrowMut, rc::Rc, sync::Arc};
@@ -41,16 +42,14 @@ pub struct Draft {
     width: u32,
     height: u32,
 
-    diffuse_bind_group_layout: Option<Rc<wgpu::BindGroupLayout>>,
+    texture_bind_group_layout: Option<Rc<wgpu::BindGroupLayout>>,
 
-    camera: DraftCamera,
-    projection: DraftProjection,
-    camera_controller: DraftCameraController,
     camera_uniform: DraftCameraUniform,
     camera_buffer: Option<wgpu::Buffer>,
     camera_bind_group_layout: Option<wgpu::BindGroupLayout>,
     camera_bind_group: Option<wgpu::BindGroup>,
 
+    camera_manager: DraftCameraManager,
     model_manager: Option<DraftModelManager>,
 
     mouse_pressed: bool,
@@ -65,11 +64,9 @@ impl Draft {
         });
         let width = 600;
         let height = 400;
-        let camera = DraftCamera::new((0.0, 5.0, 10.0), -90.0, -20.0);
-        let projection = DraftProjection::new(width, height, 45.0, 0.1, 100.0);
-        let camera_controller = DraftCameraController::new(4.0, 0.4);
+        let mut camera_manager = DraftCameraManager::new();
         let mut camera_uniform = DraftCameraUniform::new();
-        camera_uniform.update_view_proj(&camera, &projection);
+        camera_manager.update_view_proj(&mut camera_uniform);
         match app_type {
             #[cfg(not(target_arch = "wasm32"))]
             DraftAppType::Desktop => Self {
@@ -83,14 +80,12 @@ impl Draft {
                 triangle_pipeline: None,
                 width,
                 height,
-                diffuse_bind_group_layout: None,
-                camera,
-                projection,
-                camera_controller,
+                texture_bind_group_layout: None,
                 camera_uniform,
                 camera_buffer: None,
                 camera_bind_group_layout: None,
                 camera_bind_group: None,
+                camera_manager,
                 model_manager: None,
                 mouse_pressed: false,
                 last_render_time: web_time::Instant::now(),
@@ -115,14 +110,12 @@ impl Draft {
                     triangle_pipeline: None,
                     width,
                     height,
-                    diffuse_bind_group_layout: None,
-                    camera,
-                    projection,
-                    camera_controller,
+                    texture_bind_group_layout: None,
                     camera_uniform,
                     camera_buffer: None,
                     camera_bind_group_layout: None,
                     camera_bind_group: None,
+                    camera_manager,
                     model_manager: None,
                     mouse_pressed: false,
                     last_render_time: web_time::Instant::now(),
@@ -170,7 +163,7 @@ impl Draft {
             self.surface_configuration.as_ref().unwrap(),
         );
 
-        self.diffuse_bind_group_layout = Some(Rc::new(
+        self.texture_bind_group_layout = Some(Rc::new(
             self.device
                 .clone()
                 .unwrap()
@@ -201,7 +194,7 @@ impl Draft {
         self.model_manager = Some(DraftModelManager::new(
             self.device.clone().unwrap(),
             self.queue.clone().unwrap(),
-            self.diffuse_bind_group_layout.clone().unwrap(),
+            self.texture_bind_group_layout.clone().unwrap(),
         ));
 
         self.camera_buffer = Some(self.device.as_ref().unwrap().create_buffer_init(
@@ -336,7 +329,7 @@ impl Draft {
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("Render Pipeline Layout"),
                     bind_group_layouts: &[
-                        self.diffuse_bind_group_layout.as_ref().unwrap(),
+                        self.texture_bind_group_layout.as_ref().unwrap(),
                         self.camera_bind_group_layout.as_ref().unwrap(),
                     ],
                     push_constant_ranges: &[],
@@ -385,7 +378,7 @@ impl Draft {
     fn resize(&mut self, width: u32, height: u32) {
         self.width = width;
         self.height = height;
-        self.projection.resize(width, height);
+        self.camera_manager.resize_camera(width, height);
         self.surface_configuration.as_mut().unwrap().width = width;
         self.surface_configuration.as_mut().unwrap().height = height;
         self.surface.as_mut().unwrap().configure(
@@ -400,17 +393,17 @@ impl Draft {
                 device_id: _,
                 event,
                 is_synthetic: _,
-            } => self.camera_controller.process_keyboard(
+            } => self.camera_manager.active_camera().process_keyboard(
                 &event.physical_key,
                 &event.logical_key,
-                event.state,
+                &event.state,
             ),
             WindowEvent::MouseWheel {
                 device_id: _,
                 delta,
                 phase: _,
             } => {
-                self.camera_controller.process_scroll(delta);
+                self.camera_manager.active_camera().process_scroll(&delta);
                 true
             }
             WindowEvent::MouseInput {
@@ -426,9 +419,9 @@ impl Draft {
     }
 
     fn update(&mut self, dt: web_time::Duration) {
-        self.camera_controller.update_camera(&mut self.camera, dt);
-        self.camera_uniform
-            .update_view_proj(&self.camera, &self.projection);
+        self.camera_manager.active_camera().update_camera(dt);
+        self.camera_manager
+            .update_view_proj(&mut self.camera_uniform);
         self.queue.as_ref().unwrap().write_buffer(
             self.camera_buffer.as_ref().unwrap(),
             0,

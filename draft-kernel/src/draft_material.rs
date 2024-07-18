@@ -1,4 +1,4 @@
-use super::draft_texture::DraftTexture;
+use crate::draft_texture::DraftTexture;
 
 pub struct DraftMaterial {
     pub _name: String,

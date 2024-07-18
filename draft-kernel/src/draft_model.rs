@@ -1,7 +1,7 @@
+use crate::{
+    draft_instance::DraftInstance, draft_material::DraftMaterial, draft_mesh::DraftMesh, draft_util,
+};
 use std::{collections::HashMap, rc::Rc};
-
-use super::{draft_material::DraftMaterial, draft_mesh::DraftMesh};
-use crate::{draft_instance::DraftInstance, draft_util};
 use wgpu::util::DeviceExt;
 
 pub struct DraftModel {
@@ -60,7 +60,7 @@ where
 pub struct DraftModelManager {
     device: Rc<wgpu::Device>,
     queue: Rc<wgpu::Queue>,
-    diffuse_bind_group_layout: Rc<wgpu::BindGroupLayout>,
+    texture_bind_group_layout: Rc<wgpu::BindGroupLayout>,
     models: HashMap<String, DraftModel>,
     instances: HashMap<String, Vec<DraftInstance>>,
     instances_buffer: HashMap<String, wgpu::Buffer>,
@@ -70,12 +70,12 @@ impl DraftModelManager {
     pub fn new(
         device: Rc<wgpu::Device>,
         queue: Rc<wgpu::Queue>,
-        diffuse_bind_group_layout: Rc<wgpu::BindGroupLayout>,
+        texture_bind_group_layout: Rc<wgpu::BindGroupLayout>,
     ) -> Self {
         Self {
             device,
             queue,
-            diffuse_bind_group_layout,
+            texture_bind_group_layout,
             models: HashMap::new(),
             instances: HashMap::new(),
             instances_buffer: HashMap::new(),
@@ -115,7 +115,7 @@ impl DraftModelManager {
                 file_name,
                 self.device.clone(),
                 self.queue.clone(),
-                self.diffuse_bind_group_layout.clone(),
+                self.texture_bind_group_layout.clone(),
             )
             .await;
             match model {

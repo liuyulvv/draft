@@ -1,7 +1,6 @@
-use std::rc::Rc;
-
 use anyhow::*;
 use image::GenericImageView;
+use std::rc::Rc;
 
 pub struct DraftTexture {
     pub _texture: wgpu::Texture,

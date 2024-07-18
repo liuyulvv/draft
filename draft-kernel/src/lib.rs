@@ -17,7 +17,7 @@ use winit::platform::web::EventLoopExtWebSys;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn run() {
-    let file_appender = tracing_appender::rolling::hourly("./", "draft.log");
+    let file_appender = tracing_appender::rolling::hourly("./log", "draft.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
     tracing_subscriber::fmt()
         .with_writer(non_blocking)

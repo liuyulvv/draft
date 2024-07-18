@@ -1,16 +1,14 @@
+use crate::{
+    draft_material::DraftMaterial, draft_mesh::DraftMesh, draft_model::DraftModel,
+    draft_texture::DraftTexture, draft_vertex::DraftModelVertex,
+};
+use cfg_if::cfg_if;
 use std::{
     borrow::Borrow,
     io::{BufReader, Cursor},
     rc::Rc,
 };
-
-use cfg_if::cfg_if;
 use wgpu::util::DeviceExt;
-
-use crate::{
-    draft_material::DraftMaterial, draft_mesh::DraftMesh, draft_model::DraftModel,
-    draft_texture::DraftTexture, draft_vertex::DraftModelVertex,
-};
 
 #[cfg(target_arch = "wasm32")]
 fn format_url(file_name: &str) -> reqwest::Url {
@@ -75,7 +73,7 @@ pub async fn load_model(
     file_name: &str,
     device: Rc<wgpu::Device>,
     queue: Rc<wgpu::Queue>,
-    diffuse_bind_group_layout: Rc<wgpu::BindGroupLayout>,
+    texture_bind_group_layout: Rc<wgpu::BindGroupLayout>,
 ) -> anyhow::Result<DraftModel> {
     let obj_text = load_string(file_name).await?;
     let obj_cursor = Cursor::new(obj_text);
@@ -102,7 +100,7 @@ pub async fn load_model(
                 let diffuse_texture =
                     load_texture(&diffuse_texture, device.clone(), queue.clone()).await?;
                 let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    layout: diffuse_bind_group_layout.borrow(),
+                    layout: texture_bind_group_layout.borrow(),
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,
