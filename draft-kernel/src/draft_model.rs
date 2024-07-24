@@ -82,14 +82,17 @@ impl DraftModelManager {
         }
     }
 
-    pub async fn add_model(&mut self, file_name: &str) {
+    pub async fn add_model(&mut self, file_name: &str, position: Option<glam::Vec3>) {
         let exist = self.models.get(file_name);
         if exist.is_some() {
             let instance = DraftInstance {
-                position: glam::Vec3 {
-                    x: 0.0,
-                    y: 0.0,
-                    z: 0.0,
+                position: match position {
+                    Some(p) => p,
+                    None => glam::Vec3 {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
                 },
                 rotation: glam::Quat::from_axis_angle(glam::Vec3::Z, 0.0),
             };
@@ -122,10 +125,13 @@ impl DraftModelManager {
                 Ok(model) => {
                     self.models.insert(file_name.to_string(), model);
                     let instance = DraftInstance {
-                        position: glam::Vec3 {
-                            x: 0.0,
-                            y: 0.0,
-                            z: 0.0,
+                        position: match position {
+                            Some(p) => p,
+                            None => glam::Vec3 {
+                                x: 0.0,
+                                y: 0.0,
+                                z: 0.0,
+                            },
                         },
                         rotation: glam::Quat::from_axis_angle(glam::Vec3::Z, 0.0),
                     };

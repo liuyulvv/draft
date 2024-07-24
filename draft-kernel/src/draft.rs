@@ -393,7 +393,7 @@ impl Draft {
                 device_id: _,
                 event,
                 is_synthetic: _,
-            } => self.camera_manager.active_camera().process_keyboard(
+            } => self.camera_manager.process_keyboard(
                 &event.physical_key,
                 &event.logical_key,
                 &event.state,
@@ -491,9 +491,30 @@ impl ApplicationHandler for Draft {
                     is_synthetic: _,
                 } => match event.physical_key {
                     #[cfg(not(target_arch = "wasm32"))]
-                    PhysicalKey::Code(KeyCode::Enter) => {
+                    PhysicalKey::Code(KeyCode::Numpad0) => {
                         pollster::block_on(
-                            self.model_manager.as_mut().unwrap().add_model("cube.obj"),
+                            self.model_manager
+                                .as_mut()
+                                .unwrap()
+                                .add_model("cube.obj", None),
+                        );
+                    }
+                    PhysicalKey::Code(KeyCode::Numpad1) => {
+                        let position = Some(glam::vec3(3.0, 0.0, 0.0));
+                        pollster::block_on(
+                            self.model_manager
+                                .as_mut()
+                                .unwrap()
+                                .add_model("cube.obj", position),
+                        );
+                    }
+                    PhysicalKey::Code(KeyCode::Numpad4) => {
+                        let position = Some(glam::vec3(3.0, 3.0, 0.0));
+                        pollster::block_on(
+                            self.model_manager
+                                .as_mut()
+                                .unwrap()
+                                .add_model("cube.obj", position),
                         );
                     }
                     _ => {}
