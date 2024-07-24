@@ -37,7 +37,7 @@ impl DraftCamera for DraftCameraOrthographic {
     }
 
     fn projection_matrix(&self) -> glam::Mat4 {
-        self.projection.calc_matrix()
+        self.projection.calc_orthographic_matrix()
     }
 
     fn process_keyboard(

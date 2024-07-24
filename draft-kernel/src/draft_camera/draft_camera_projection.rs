@@ -19,7 +19,19 @@ impl DraftCameraProjection {
         self.aspect = width as f32 / height as f32;
     }
 
-    pub fn calc_matrix(&self) -> glam::Mat4 {
+    pub fn calc_perspective_matrix(&self) -> glam::Mat4 {
         glam::Mat4::perspective_rh(self.fov_y, self.aspect, self.z_near, self.z_far)
+    }
+
+    pub fn calc_orthographic_matrix(&self) -> glam::Mat4 {
+        let top = 6.0;
+        glam::Mat4::orthographic_rh(
+            -self.aspect * top,
+            self.aspect * top,
+            -top,
+            top,
+            self.z_near,
+            self.z_far,
+        )
     }
 }
