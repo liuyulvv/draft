@@ -3,6 +3,7 @@
         "appender",
         "bindgen",
         "bytemuck",
+        "chrono",
         "consts",
         "mipmap",
         "multisample",
