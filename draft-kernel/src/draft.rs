@@ -499,6 +499,7 @@ impl ApplicationHandler for Draft {
                                 .add_model("cube.obj", None),
                         );
                     }
+                    #[cfg(not(target_arch = "wasm32"))]
                     PhysicalKey::Code(KeyCode::Numpad1) => {
                         let position = Some(glam::vec3(3.0, 0.0, 0.0));
                         pollster::block_on(
@@ -508,6 +509,7 @@ impl ApplicationHandler for Draft {
                                 .add_model("cube.obj", position),
                         );
                     }
+                    #[cfg(not(target_arch = "wasm32"))]
                     PhysicalKey::Code(KeyCode::Numpad4) => {
                         let position = Some(glam::vec3(3.0, 3.0, 0.0));
                         pollster::block_on(

@@ -1,4 +1,3 @@
-#[cfg(not(target_arch = "wasm32"))]
 use winit::{
     event::ElementState,
     keyboard::{Key, KeyCode, PhysicalKey},
