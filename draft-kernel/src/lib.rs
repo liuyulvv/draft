@@ -1,5 +1,6 @@
 mod draft;
 mod draft_camera;
+mod draft_gui;
 mod draft_instance;
 mod draft_material;
 mod draft_mesh;

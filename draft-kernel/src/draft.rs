@@ -2,10 +2,12 @@ use crate::{
     draft_camera::{
         draft_camera_manager::DraftCameraManager, draft_camera_uniform::DraftCameraUniform,
     },
+    draft_gui::draft_gui_render::DraftGuiRender,
     draft_instance::DraftInstanceRaw,
     draft_model::{DraftModelManager, DrawModel},
     draft_vertex::{DraftModelVertex, DraftVertexTrait},
 };
+use egui_wgpu::ScreenDescriptor;
 use std::{borrow::BorrowMut, rc::Rc, sync::Arc};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -54,6 +56,8 @@ pub struct Draft {
 
     mouse_pressed: bool,
     last_render_time: web_time::Instant,
+
+    gui_render: Option<DraftGuiRender>,
 }
 
 impl Draft {
@@ -89,6 +93,7 @@ impl Draft {
                 model_manager: None,
                 mouse_pressed: false,
                 last_render_time: web_time::Instant::now(),
+                gui_render: None,
             },
             #[cfg(target_arch = "wasm32")]
             DraftAppType::Web => {
@@ -97,7 +102,7 @@ impl Draft {
                 let canvas = document.get_element_by_id("main_canvas").unwrap();
                 let canvas = canvas
                     .dyn_into::<web_sys::HtmlCanvasElement>()
-                    .expect("Show have a canvas");
+                    .expect("Should have a canvas");
                 let surface = Draft::create_surface(&instance, canvas);
                 Self {
                     instance,
@@ -119,6 +124,7 @@ impl Draft {
                     model_manager: None,
                     mouse_pressed: false,
                     last_render_time: web_time::Instant::now(),
+                    gui_render: None,
                 }
             }
         }
@@ -238,6 +244,16 @@ impl Draft {
                 .create_shader_module(include_wgsl!("shader/shader.wgsl")),
         );
         self.create_triangle_pipeline();
+
+        #[allow(unused_mut)]
+        let mut gui_render = DraftGuiRender::new(
+            self.device.clone().unwrap().as_ref(),
+            self.surface_configuration.as_ref().unwrap().format,
+            None,
+            1,
+            self.window.clone().unwrap().as_ref(),
+        );
+        self.gui_render = Some(gui_render);
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -252,6 +268,22 @@ impl Draft {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("Render Encoder"),
                 });
+
+        {
+            let screen_descriptor = ScreenDescriptor {
+                size_in_pixels: [self.width, self.height],
+                pixels_per_point: self.window.unwrap().scale_factor() as f32,
+            };
+            self.gui_render.as_mut().unwrap().draw(
+                self.device.as_ref().unwrap(),
+                self.queue.as_ref().unwrap(),
+                &mut encoder,
+                self.window.as_ref().unwrap(),
+                &view,
+                screen_descriptor,
+            )
+        }
+
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
@@ -388,6 +420,10 @@ impl Draft {
     }
 
     fn input(&mut self, event: &WindowEvent) -> bool {
+        self.gui_render
+            .as_mut()
+            .unwrap()
+            .handle_input(self.window.as_ref().unwrap(), event);
         match event {
             WindowEvent::KeyboardInput {
                 device_id: _,
@@ -499,6 +535,7 @@ impl ApplicationHandler for Draft {
                                 .add_model("cube.obj", None),
                         );
                     }
+                    #[cfg(not(target_arch = "wasm32"))]
                     PhysicalKey::Code(KeyCode::Numpad1) => {
                         let position = Some(glam::vec3(3.0, 0.0, 0.0));
                         pollster::block_on(
@@ -508,6 +545,7 @@ impl ApplicationHandler for Draft {
                                 .add_model("cube.obj", position),
                         );
                     }
+                    #[cfg(not(target_arch = "wasm32"))]
                     PhysicalKey::Code(KeyCode::Numpad4) => {
                         let position = Some(glam::vec3(3.0, 3.0, 0.0));
                         pollster::block_on(

@@ -12,6 +12,9 @@ anyhow = "1.0.86"
 bytemuck = { version = "1.16.1", features = ["derive"] }
 cfg-if = "1.0.0"
 chrono = "0.4.38"
+egui = "0.28.1"
+egui-wgpu = { version = "0.28.1", features = ["winit"] }
+egui-winit = "0.28.1"
 glam = "0.28.0"
 log = "0.4.22"
 time = "0.3.36"
